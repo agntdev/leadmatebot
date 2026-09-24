@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Begin the guided booking form (select service → date/time → contact → confirm)"
+              "text": "Choose a service."
             }
           }
         ],

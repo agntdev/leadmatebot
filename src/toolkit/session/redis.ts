@@ -79,8 +79,10 @@ export function defaultRedisStorage<T>(url: string): StorageAdapter<T> {
     (inner ??= (async () => {
       const { createRequire } = await import("node:module");
       const require = createRequire(import.meta.url);
+      // Keep the package name out of esbuild's static dependency graph. This
+      // branch is Node-only and is never reached by the Workers entry.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ioredis: any = require("ioredis");
+      const ioredis: any = require(["ioredis"].join(""));
       const Redis = ioredis.default ?? ioredis.Redis ?? ioredis;
       // maxRetriesPerRequest: null → commands queue while (re)connecting rather
       // than failing fast, matching session-store expectations.

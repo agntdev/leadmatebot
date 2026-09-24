@@ -31,7 +31,7 @@ export type OwnerAwareCtx = {
   env?: Record<string, unknown> | null;
   from?: { id: number } | undefined;
   chat?: { id: number } | undefined;
-  reply: (text: string, ...args: unknown[]) => unknown | Promise<unknown>;
+  reply: (text: string, ...args: any[]) => unknown | Promise<unknown>;
   answerCallbackQuery?: (
     opts?: { text?: string; show_alert?: boolean },
   ) => unknown | Promise<unknown>;
@@ -69,25 +69,21 @@ function nodeProcessEnv(): Record<string, unknown> | undefined {
  * Platform-injected owner/admin chat id, or `undefined` if unset.
  * Prefer `ctx.env` (Workers); fall back to `process.env` only for Node/harness.
  */
-export function adminChatId(ctx: {
-  env?: Record<string, unknown> | null;
-}): string | undefined {
+export function adminChatId(ctx: { env?: Record<string, unknown> | null } | object): string | undefined {
+  const runtime = ctx as { env?: Record<string, unknown> | null };
   return (
-    readAdminFromEnv(ctx.env ?? undefined) ?? readAdminFromEnv(nodeProcessEnv())
+    readAdminFromEnv(runtime.env ?? undefined) ?? readAdminFromEnv(nodeProcessEnv())
   );
 }
 
 /** True when the update's user (or private chat) matches the injected owner id. */
-export function isOwner(ctx: {
-  env?: Record<string, unknown> | null;
-  from?: { id: number } | undefined;
-  chat?: { id: number } | undefined;
-}): boolean {
-  const admin = adminChatId(ctx);
+export function isOwner(ctx: { env?: Record<string, unknown> | null; from?: { id: number }; chat?: { id: number } } | object): boolean {
+  const runtime = ctx as { env?: Record<string, unknown> | null; from?: { id: number }; chat?: { id: number } };
+  const admin = adminChatId(runtime);
   if (admin === undefined) return false;
-  if (ctx.from?.id !== undefined && String(ctx.from.id) === admin) return true;
+  if (runtime.from?.id !== undefined && String(runtime.from.id) === admin) return true;
   // Private chats: chat id equals user id — notify targets often use chat id.
-  if (ctx.chat?.id !== undefined && String(ctx.chat.id) === admin) return true;
+  if (runtime.chat?.id !== undefined && String(runtime.chat.id) === admin) return true;
   return false;
 }
 
