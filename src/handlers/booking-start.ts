@@ -1,17 +1,26 @@
 import { Composer } from "grammy";
+import type { Ctx } from "../bot.js";
+import { adminChatId, inlineButton, inlineKeyboard, registerMainMenuItem } from "../toolkit/index.js";
+import { getState, id, now, truncate, withState } from "../data.js";
 
-// SCAFFOLD — generated from the bot blueprint BEFORE the agent runs.
-// Keep a LIVE registration (.command / .callbackQuery / …) so this feature is
-// never an empty stub. Replace the reply body with real logic + copy; if you
-// change the user-facing text, update tests/specs to match EXACTLY.
-// Do NOT rewrite src/bot.ts — buildBot() already auto-loads this module.
-// Menu: wire this into /start via registerMainMenuItem({ label: "Book appointment", data: "booking:start" }) if the toolkit exposes it.
-
-const composer = new Composer();
-
-composer.callbackQuery("booking:start", async (ctx) => {
-  await ctx.answerCallbackQuery();
-  await ctx.reply("Begin the guided booking form (select service → date/time → contact → confirm)");
+registerMainMenuItem({ label: "Book appointment", data: "booking:start", order: 20 });
+const composer = new Composer<Ctx>(); const force = (p: string) => ({ force_reply: true as const, input_field_placeholder: p });
+async function services(ctx: Ctx) { const s = await getState(ctx); const list = s.serviceIds.map((x) => s.services[x]).filter((x) => x?.visible); await ctx.reply("Choose a service.", { reply_markup: inlineKeyboard(list.map((x) => [inlineButton(x.title, `booking:service:${x.serviceId}`)]).concat([[inlineButton("Back to menu", "menu:main")]])) }); }
+composer.callbackQuery("booking:start", async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.step = "booking_service"; await services(ctx); });
+composer.callbackQuery(/^booking:from_service:/, async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.draft = { serviceId: ctx.callbackQuery.data.slice(21) }; await datePrompt(ctx); });
+composer.callbackQuery(/^booking:service:/, async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.draft = { serviceId: ctx.callbackQuery.data.slice(16) }; await datePrompt(ctx); });
+async function datePrompt(ctx: Ctx) { ctx.session.step = "booking_date"; await ctx.reply("What date would you prefer? Use YYYY-MM-DD.", { reply_markup: force("2026-09-30") }); }
+composer.on("message:text", async (ctx, next) => { const d = ctx.session.draft ?? {}; const text = ctx.message.text.trim();
+  if (ctx.session.step === "booking_date") { if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) { await ctx.reply("Use the date format YYYY-MM-DD and try again.", { reply_markup: force("2026-09-30") }); return; } ctx.session.draft = { ...d, date: text }; ctx.session.step = "booking_time"; await ctx.reply("What time would you prefer? Use HH:MM.", { reply_markup: force("14:30") }); return; }
+  if (ctx.session.step === "booking_time") { if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(text)) { await ctx.reply("Use the time format HH:MM and try again.", { reply_markup: force("14:30") }); return; } const when = new Date(`${d.date}T${text}:00Z`).getTime(); if (!Number.isFinite(when) || when <= now()) { await ctx.reply("That time has passed. Choose a future date and time.", { reply_markup: force("14:30") }); return; } ctx.session.draft = { ...d, time: text }; ctx.session.step = "booking_name"; await ctx.reply("What name should we use? You can skip this.", { reply_markup: inlineKeyboard([[inlineButton("Skip", "booking:skip_name")]]) }); return; }
+  if (ctx.session.step === "booking_name") { ctx.session.draft = { ...d, name: text }; await contactPrompt(ctx); return; }
+  if (ctx.session.step === "booking_phone") { ctx.session.draft = { ...d, phone: text }; ctx.session.step = "booking_email"; await ctx.reply("What email address can we use? You can skip this.", { reply_markup: inlineKeyboard([[inlineButton("Skip", "booking:skip_email")]]) }); return; }
+  if (ctx.session.step === "booking_email") { ctx.session.draft = { ...d, email: text }; await preview(ctx); return; } return next();
 });
-
+async function contactPrompt(ctx: Ctx) { ctx.session.step = "booking_phone"; await ctx.reply("What phone number can we use? You can skip this.", { reply_markup: inlineKeyboard([[inlineButton("Skip", "booking:skip_phone")]]) }); }
+composer.callbackQuery("booking:skip_name", async (ctx) => { await ctx.answerCallbackQuery(); await contactPrompt(ctx); });
+composer.callbackQuery("booking:skip_phone", async (ctx) => { await ctx.answerCallbackQuery(); ctx.session.step = "booking_email"; await ctx.reply("What email address can we use? You can skip this.", { reply_markup: inlineKeyboard([[inlineButton("Skip", "booking:skip_email")]]) }); });
+composer.callbackQuery("booking:skip_email", async (ctx) => { await ctx.answerCallbackQuery(); await preview(ctx); });
+async function preview(ctx: Ctx) { const d = ctx.session.draft ?? {}; ctx.session.step = "booking_confirm"; const s = (await getState(ctx)).services[d.serviceId ?? ""]; await ctx.reply(`Please check your appointment request:\n\n${s?.title ?? "Selected service"}\n${d.date} at ${d.time}\nPrivacy note: we’ll use these details only to arrange your appointment.`, { reply_markup: inlineKeyboard([[inlineButton("Confirm booking", "booking:confirm"), inlineButton("Edit", "booking:start")]]) }); }
+composer.callbackQuery("booking:confirm", async (ctx) => { await ctx.answerCallbackQuery(); const d = ctx.session.draft ?? {}; const timestamp = new Date(now()).toISOString(); const bookingId = id("booking"); await withState(ctx, (s) => { s.bookings[bookingId] = { bookingId, serviceId: d.serviceId ?? "", userTelegramId: String(ctx.from.id), preferredDate: d.date ?? "", preferredTime: d.time ?? "", contactName: d.name, contactPhone: d.phone, contactEmail: d.email, status: "Pending", createdAt: timestamp, updatedAt: timestamp }; s.bookingIds.push(bookingId); }); const owner = adminChatId(ctx); if (owner) { try { await ctx.api.sendMessage(owner, `New booking request ${bookingId}\n${d.date} at ${d.time}\n${truncate(d.name ?? "Anonymous")}`, { reply_markup: inlineKeyboard([[inlineButton("Accept", `admin:accept:booking:${bookingId}`), inlineButton("Reject", `admin:reject:booking:${bookingId}`)], [inlineButton("Ask for info", `admin:ask:booking:${bookingId}`), inlineButton("View conversation", `admin:view:booking:${bookingId}`)] ]) }); } catch { /* notification is best effort */ } } ctx.session.step = undefined; ctx.session.draft = undefined; await ctx.reply(owner ? `Your booking request was received. Reference: ${bookingId}` : `Your booking was saved. The owner notification is pending. Reference: ${bookingId}`); });
 export default composer;
