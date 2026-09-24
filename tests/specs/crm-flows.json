@@ -1,0 +1,35 @@
+[
+  {
+    "name": "customer submits a contact request",
+    "steps": [
+      { "send": { "callback": "lead:start" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Tell us how we can help. Your message stays private and is shared only with the owner." } }] },
+      { "send": { "text": "I need help planning a project" }, "expect": [{ "method": "sendMessage", "payload": { "text": "What name should we use? You can skip this." } }] },
+      { "send": { "callback": "lead:skip" }, "expect": [{ "method": "sendMessage", "payload": { "text": "What phone number should we use? You can skip this." } }] },
+      { "send": { "callback": "lead:skip" }, "expect": [{ "method": "sendMessage", "payload": { "text": "What email address should we use? You can skip this." } }] },
+      { "send": { "callback": "lead:skip" }, "expect": [{ "method": "sendMessage" }] },
+      { "send": { "callback": "lead:submit" }, "expect": [{ "method": "sendMessage" }] }
+    ]
+  },
+  {
+    "name": "customer books a service",
+    "steps": [
+      { "send": { "callback": "booking:start" }, "expect": [{ "method": "sendMessage", "payload": { "text": "Which service would you like to book?" } }] },
+      { "send": { "callback": "booking:service:consultation" }, "expect": [{ "method": "sendMessage", "payload": { "text": "What date would you prefer? Use YYYY-MM-DD." } }] },
+      { "send": { "text": "2099-01-01" }, "expect": [{ "method": "sendMessage", "payload": { "text": "What time would you prefer? Use 24-hour HH:MM." } }] },
+      { "send": { "text": "10:30" }, "expect": [{ "method": "sendMessage", "payload": { "text": "What name should we use? You can skip this." } }] },
+      { "send": { "callback": "booking:skip" }, "expect": [{ "method": "sendMessage", "payload": { "text": "What phone number should we use? You can skip this." } }] },
+      { "send": { "callback": "booking:skip" }, "expect": [{ "method": "sendMessage", "payload": { "text": "What email address should we use? You can skip this." } }] },
+      { "send": { "callback": "booking:skip" }, "expect": [{ "method": "sendMessage" }] },
+      { "send": { "callback": "booking:confirm" }, "expect": [{ "method": "sendMessage" }] }
+    ]
+  },
+  {
+    "name": "past booking time is rejected",
+    "steps": [
+      { "send": { "callback": "booking:start" }, "expect": [{ "method": "sendMessage" }] },
+      { "send": { "callback": "booking:service:consultation" }, "expect": [{ "method": "sendMessage" }] },
+      { "send": { "text": "2000-01-01" }, "expect": [{ "method": "sendMessage" }] },
+      { "send": { "text": "10:30" }, "expect": [{ "method": "sendMessage", "payload": { "text": "That date and time has passed or is not valid. Enter a future time." } }] }
+    ]
+  }
+]

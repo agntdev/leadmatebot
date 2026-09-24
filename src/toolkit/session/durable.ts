@@ -144,6 +144,21 @@ export class ChatDO {
       }
     }
 
+    // Domain records for bots that use this ChatDO as their durable store.
+    // Kept separate from the grammY session so ephemeral flow state can expire
+    // without touching leads, bookings, profiles, or catalog data.
+    if (url.pathname === "/data") {
+      if (request.method === "GET") {
+        const value = await this.state.storage.get<unknown>("domain-data");
+        if (value === undefined) return new Response(null, { status: 204 });
+        return Response.json(value);
+      }
+      if (request.method === "PUT") {
+        await this.state.storage.put("domain-data", await request.json());
+        return new Response(null, { status: 204 });
+      }
+    }
+
     // Schedule a reminder + (re)arm the alarm to the earliest due one.
     if (url.pathname === "/remind" && request.method === "POST") {
       const rem = (await request.json()) as Reminder;

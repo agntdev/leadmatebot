@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Open the free-text lead/contact form with optional contact fields"
+              "text": "Tell us how we can help. Your message stays private and is shared only with the owner."
             }
           }
         ],

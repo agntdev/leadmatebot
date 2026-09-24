@@ -7,7 +7,7 @@
           {
             "method": "sendMessage",
             "payload": {
-              "text": "Open the service catalog (paginated, up to 8 items shown)"
+              "text": "Choose a service to see details:"
             }
           }
         ],
